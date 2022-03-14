@@ -350,7 +350,7 @@ namespace AppInspectServices
 
             result.OutputApks = workerResult.Total;
             result.Records = workerResult.Records.GroupBy(r => r.AppId, (appid, records) => new GrouppedApkAnalysisRecord() { AppId = appid, ApkRecords = records.OrderByDescending(ar => ar.VersionCode).ToList() }).ToList();
-            result.OutputApps = workerResult.Records.Count();
+            result.OutputApps = result.Records.Count();
             result.OutputApkLimit = workerResult.OutputLimit;
 
             var appIdList = result.Records.Select(r => r.AppId).ToList();

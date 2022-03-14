@@ -98,20 +98,25 @@ namespace AppInspectServices.Hubs
             {
                 foreach (var taskId in taskIds.AsArray().Select(id => id!.ToString()))
                 {
-                    if (!appInspectData.Tasks.AsQueryable().Any(t => t.Id == taskId && t.Started == null))
+                    if (!appInspectData.Tasks.AsQueryable().Any(t => t.Id == taskId && t.Started == null && t.WorkerConnectionId == null && t.Worker == null))
                         continue;
 
                     var workerIPAddress = TryGetClientIPAddress()?.ToString();
 
+                    // necessnary to put multiple filter conditions to avoid high concurrency problem - multiple workers may ask to take up the same task at almost the same time
                     await appInspectData.Tasks
-                        .UpdateOneAsync(Builders<AppInspectTask>.Filter.Eq(t => t.Id, taskId),
+                        .UpdateOneAsync(Builders<AppInspectTask>.Filter.Eq(t => t.Id, taskId) &
+                                        Builders<AppInspectTask>.Filter.Eq(t => t.Started, null) &
+                                        Builders<AppInspectTask>.Filter.Eq(t => t.WorkerConnectionId, null) &
+                                        Builders<AppInspectTask>.Filter.Eq(t => t.Worker, null),
                                         Builders<AppInspectTask>.Update
                                             .Set(t => t.Started, DateTime.UtcNow)
                                             .Set(t => t.WorkerConnectionId, Context.ConnectionId)
                                             .Set(t => t.Worker, workerIPAddress));
 
-                    var task = appInspectData.Tasks.AsQueryable().Where(t => t.Id == taskId).First();
-                    await Clients.Client(Context.ConnectionId).SendAsync("AssignTask", task.Id, task.Action, task.Arguments, task.BasePriority);
+                    var task = appInspectData.Tasks.AsQueryable().Where(t => t.Id == taskId && t.Worker == workerIPAddress && t.WorkerConnectionId == Context.ConnectionId).FirstOrDefault();
+                    if (task != null)
+                        await Clients.Client(Context.ConnectionId).SendAsync("AssignTask", task.Id, task.Action, task.Arguments, task.BasePriority);
                 }
             }
         }
